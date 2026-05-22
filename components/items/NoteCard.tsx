@@ -1,6 +1,10 @@
 ﻿import { Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { darkTheme } from "../../constants/theme";
+
+const colors = darkTheme.colors;
+
 type NoteCardProps = {
   title: string;
   content: string;
@@ -13,7 +17,7 @@ export function NoteCard({ title, content, updatedAt, onPress }: NoteCardProps) 
     <Pressable style={styles.card} onPress={onPress}>
       <View style={styles.header}>
         <View style={styles.iconBox}>
-          <Ionicons name="document-text-outline" size={22} color="#2563eb" />
+          <Ionicons name="document-text-outline" size={22} color={colors.primary} />
         </View>
 
         <View style={styles.textBox}>
@@ -27,6 +31,8 @@ export function NoteCard({ title, content, updatedAt, onPress }: NoteCardProps) 
             </Text>
           ) : null}
         </View>
+
+        <Ionicons name="chevron-forward" size={20} color={colors.mutedText} />
       </View>
 
       <Text style={styles.content} numberOfLines={3}>
@@ -38,20 +44,12 @@ export function NoteCard({ title, content, updatedAt, onPress }: NoteCardProps) 
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: "#ffffff",
-    borderRadius: 18,
+    backgroundColor: colors.card,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#e5e7eb",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 2,
+    borderColor: colors.border,
   },
   header: {
     flexDirection: "row",
@@ -59,10 +57,10 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   iconBox: {
-    width: 42,
-    height: 42,
-    borderRadius: 14,
-    backgroundColor: "#eff6ff",
+    width: 44,
+    height: 44,
+    borderRadius: 15,
+    backgroundColor: colors.primarySoft,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -72,17 +70,17 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 18,
-    fontWeight: "700",
-    color: "#111827",
+    fontWeight: "800",
+    color: colors.text,
   },
   date: {
-    marginTop: 2,
+    marginTop: 3,
     fontSize: 13,
-    color: "#6b7280",
+    color: colors.mutedText,
   },
   content: {
     fontSize: 15,
-    lineHeight: 21,
-    color: "#374151",
+    lineHeight: 22,
+    color: colors.mutedText,
   },
 });
