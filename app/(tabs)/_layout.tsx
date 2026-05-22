@@ -42,6 +42,17 @@ export default function TabsLayout() {
         }}
       />
 
+      <Tabs.Screen
+        name="ajustes"
+        options={{
+          title: 'Ajustes',
+          tabBarLabel: 'Ajustes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings-outline" size={size} color={color} />
+          ),
+        }}
+      />
+
       <Tabs.Screen name="notas/[id]" options={{ href: null }} />
       <Tabs.Screen name="checklists/[id]" options={{ href: null }} />
       <Tabs.Screen name="ideas/[id]" options={{ href: null }} />
