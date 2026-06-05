@@ -1,22 +1,63 @@
-﻿import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IdeaCard } from "../../../components/items/IdeaCard";
-import { useIdeasStore } from "../../../store/ideasStore";
 import { darkTheme } from "../../../constants/theme";
+import { getNotes } from "../../../services/api";
+import type { ApiNote } from "../../../services/api";
 
 const colors = darkTheme.colors;
+
+function getTagNames(tags: ApiNote["tags"]) {
+  return tags.map((tag) => (typeof tag === "string" ? tag : tag.tag));
+}
 
 export default function IdeasScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const ideas = useIdeasStore((state) => state.ideas);
+
+  const [apiNotes, setApiNotes] = useState<ApiNote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const ideas = apiNotes
+    .filter((note) => note.type === "idea")
+    .map((idea) => ({
+      ...idea,
+      tags: getTagNames(idea.tags),
+    }));
 
   const ideasWithTags = ideas.filter((idea) => idea.tags.length > 0).length;
   const totalTags = ideas.reduce((total, idea) => total + idea.tags.length, 0);
+
+  async function loadIdeas() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const data = await getNotes();
+      setApiNotes(data);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("No se pudieron cargar las ideas desde la API.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadIdeas();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -65,33 +106,52 @@ export default function IdeasScreen() {
       </View>
 
       <View style={styles.listContainer}>
-        <FlashList
-          data={ideas}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <IdeaCard
-              title={item.title}
-              content={item.content}
-              tags={item.tags}
-              updatedAt={item.updatedAt}
-              onPress={() => router.push(`/ideas/${item.id}`)}
-            />
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Ionicons name="bulb-outline" size={34} color={colors.warning} />
-              <Text style={styles.emptyTitle}>Todavía no tienes ideas</Text>
-              <Text style={styles.emptyText}>
-                Pulsa el botón + para guardar tu primera idea.
-              </Text>
-            </View>
-          }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: 96 + insets.bottom },
-          ]}
-        />
+        {isLoading ? (
+          <View style={styles.feedbackCard}>
+            <ActivityIndicator color={colors.warning} />
+            <Text style={styles.feedbackText}>
+              Cargando ideas desde la API...
+            </Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.feedbackCard}>
+            <Ionicons name="warning-outline" size={34} color={colors.warning} />
+            <Text style={styles.emptyTitle}>Error al cargar ideas</Text>
+            <Text style={styles.emptyText}>{errorMessage}</Text>
+
+            <Pressable style={styles.retryButton} onPress={loadIdeas}>
+              <Text style={styles.retryButtonText}>Reintentar</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlashList
+            data={ideas}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <IdeaCard
+                title={item.title}
+                content={item.content}
+                tags={item.tags}
+                updatedAt={item.updated_at}
+                onPress={() => router.push(`/ideas/${item.id}`)}
+              />
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyCard}>
+                <Ionicons name="bulb-outline" size={34} color={colors.warning} />
+                <Text style={styles.emptyTitle}>Todavía no tienes ideas</Text>
+                <Text style={styles.emptyText}>
+                  Pulsa el botón + para guardar tu primera idea.
+                </Text>
+              </View>
+            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 96 + insets.bottom },
+            ]}
+          />
+        )}
       </View>
     </View>
   );
@@ -199,6 +259,33 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 32,
+  },
+  feedbackCard: {
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    marginTop: 8,
+    gap: 12,
+  },
+  feedbackText: {
+    color: colors.mutedText,
+    fontSize: 15,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: colors.warning,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "800",
   },
   emptyCard: {
     backgroundColor: colors.card,

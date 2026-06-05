@@ -1,14 +1,58 @@
-﻿import { Ionicons } from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
-import { useIdeasStore } from "../../../store/ideasStore";
+import { deleteNote, getNoteById } from "../../../services/api";
+import type { ApiNote } from "../../../services/api";
+
+function getTagNames(tags: ApiNote["tags"]) {
+  return tags.map((tag) => (typeof tag === "string" ? tag : tag.tag));
+}
 
 export default function IdeaDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const idea = useIdeasStore((state) => state.getIdeaById(id));
-  const deleteIdea = useIdeasStore((state) => state.deleteIdea);
+  const [idea, setIdea] = useState<ApiNote | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function loadIdea() {
+    if (!id) return;
+
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const data = await getNoteById(id);
+
+      if (data.type !== "idea") {
+        setIdea(null);
+        setErrorMessage("El elemento encontrado no es una idea.");
+        return;
+      }
+
+      setIdea(data);
+    } catch (error) {
+      console.error(error);
+      setIdea(null);
+      setErrorMessage("No se pudo cargar la idea desde la API.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadIdea();
+  }, [id]);
 
   const handleDelete = () => {
     if (!idea) return;
@@ -24,32 +68,60 @@ export default function IdeaDetailScreen() {
         {
           text: "Eliminar",
           style: "destructive",
-          onPress: () => {
-            deleteIdea(idea.id);
-            router.replace("/(tabs)/ideas");
+          onPress: async () => {
+            try {
+              await deleteNote(idea.id);
+              router.replace("/(tabs)/ideas");
+            } catch (error) {
+              console.error(error);
+              Alert.alert("Error", "No se pudo eliminar la idea desde la API.");
+            }
           },
         },
       ]
     );
   };
 
-  if (!idea) {
+  if (isLoading) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen options={{ title: "Cargando idea" }} />
+
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#f59e0b" />
+          <Text style={styles.subtitle}>Cargando idea desde la API...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!idea || errorMessage) {
     return (
       <View style={styles.container}>
         <Stack.Screen options={{ title: "Idea no encontrada" }} />
 
-        <Text style={styles.title}>Idea no encontrada</Text>
-        <Text style={styles.subtitle}>No existe una idea con el ID {id}.</Text>
+        <View style={styles.content}>
+          <Text style={styles.title}>Idea no encontrada</Text>
+          <Text style={styles.subtitle}>
+            {errorMessage ?? `No existe una idea con el ID ${id}.`}
+          </Text>
 
-        <Pressable
-          style={styles.editButton}
-          onPress={() => router.replace("/(tabs)/ideas")}
-        >
-          <Text style={styles.buttonText}>Volver a ideas</Text>
-        </Pressable>
+          <Pressable
+            style={styles.editButton}
+            onPress={() => router.replace("/(tabs)/ideas")}
+          >
+            <Text style={styles.buttonText}>Volver a ideas</Text>
+          </Pressable>
+
+          <Pressable style={styles.secondaryButton} onPress={loadIdea}>
+            <Text style={styles.secondaryButtonText}>Reintentar</Text>
+          </Pressable>
+        </View>
       </View>
     );
   }
+
+  const tags = getTagNames(idea.tags);
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -61,7 +133,9 @@ export default function IdeaDetailScreen() {
 
       <Text style={styles.title}>{idea.title}</Text>
 
-      <Text style={styles.date}>Actualizada: {idea.updatedAt}</Text>
+      <Text style={styles.date}>
+        Actualizada: {new Date(idea.updated_at).toLocaleString()}
+      </Text>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Descripción</Text>
@@ -72,8 +146,8 @@ export default function IdeaDetailScreen() {
         <Text style={styles.sectionTitle}>Etiquetas</Text>
 
         <View style={styles.tagsContainer}>
-          {idea.tags.length > 0 ? (
-            idea.tags.map((tag) => (
+          {tags.length > 0 ? (
+            tags.map((tag) => (
               <View key={tag} style={styles.tag}>
                 <Text style={styles.tagText}>#{tag}</Text>
               </View>
@@ -84,12 +158,13 @@ export default function IdeaDetailScreen() {
         </View>
       </View>
 
-      <Pressable
-        style={styles.editButton}
-        onPress={() => router.push(`/editar-idea/${idea.id}`)}
-      >
-        <Text style={styles.buttonText}>Editar idea</Text>
-      </Pressable>
+      <View style={styles.infoBox}>
+        <Text style={styles.infoLabel}>Nota</Text>
+        <Text style={styles.infoValue}>
+          El detalle de esta idea ya se carga desde la API. La edición se
+          conectará en un paso posterior.
+        </Text>
+      </View>
 
       <Pressable style={styles.deleteButton} onPress={handleDelete}>
         <Text style={styles.buttonText}>Eliminar idea</Text>
@@ -111,6 +186,13 @@ const styles = StyleSheet.create({
   content: {
     padding: 24,
     paddingBottom: 40,
+  },
+  centerContent: {
+    flex: 1,
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
   },
   iconBox: {
     width: 70,
@@ -179,6 +261,20 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 12,
   },
+  secondaryButton: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: "center",
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: "#f59e0b",
+  },
+  secondaryButtonText: {
+    color: "#f59e0b",
+    fontSize: 16,
+    fontWeight: "800",
+  },
   deleteButton: {
     backgroundColor: "#dc2626",
     borderRadius: 16,
@@ -197,6 +293,7 @@ const styles = StyleSheet.create({
     padding: 18,
     borderWidth: 1,
     borderColor: "#e5e7eb",
+    marginBottom: 18,
   },
   infoLabel: {
     fontSize: 14,
@@ -204,8 +301,9 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   infoValue: {
-    fontSize: 18,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: "#111827",
+    lineHeight: 22,
   },
 });
