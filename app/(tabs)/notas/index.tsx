@@ -1,19 +1,45 @@
-﻿import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import { FlashList } from "@shopify/flash-list";
+import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  FlatList,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { NoteCard } from "../../../components/items/NoteCard";
-import { useNotesStore } from "../../../store/notesStore";
-import { darkTheme } from "../../../constants/theme";
-
-const colors = darkTheme.colors;
+import { getNotes } from "../../../services/api";
+import type { ApiNote } from "../../../services/api";
 
 export default function NotesScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const notes = useNotesStore((state) => state.notes);
+
+  const [notes, setNotes] = useState<ApiNote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const textNotes = notes.filter((note) => note.type === "note");
+
+  async function loadNotes() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const data = await getNotes();
+      setNotes(data);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("No se pudieron cargar las notas desde la API.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadNotes();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -22,7 +48,7 @@ export default function NotesScreen() {
           <Text style={styles.kicker}>NoteFlow</Text>
           <Text style={styles.title}>Notas</Text>
           <Text style={styles.subtitle}>
-            Captura ideas rápidas, apuntes y recordatorios importantes.
+            Listado principal de notas de texto desde la API.
           </Text>
         </View>
 
@@ -30,49 +56,66 @@ export default function NotesScreen() {
           style={styles.addButton}
           onPress={() => router.push("/nueva-nota")}
         >
-          <Ionicons name="add" size={28} color={colors.text} />
+          <Ionicons name="add" size={26} color="#ffffff" />
         </Pressable>
       </View>
 
       <View style={styles.summaryCard}>
-        <View>
-          <Text style={styles.summaryLabel}>Total de notas</Text>
-          <Text style={styles.summaryValue}>{notes.length}</Text>
-        </View>
-
-        <View style={styles.summaryIcon}>
-          <Ionicons name="document-text-outline" size={24} color={colors.primary} />
-        </View>
+        <Text style={styles.summaryLabel}>Total de notas</Text>
+        <Text style={styles.summaryValue}>{textNotes.length}</Text>
       </View>
 
-      <View style={styles.listContainer}>
-        <FlashList
-          data={notes}
+      {isLoading ? (
+        <View style={styles.centerCard}>
+          <ActivityIndicator size="large" color="#8b5cf6" />
+          <Text style={styles.centerText}>Cargando notas desde la API...</Text>
+        </View>
+      ) : errorMessage ? (
+        <View style={styles.centerCard}>
+          <Ionicons name="warning-outline" size={36} color="#8b5cf6" />
+          <Text style={styles.errorTitle}>Error al cargar notas</Text>
+          <Text style={styles.centerText}>{errorMessage}</Text>
+
+          <Pressable style={styles.retryButton} onPress={loadNotes}>
+            <Text style={styles.retryButtonText}>Reintentar</Text>
+          </Pressable>
+        </View>
+      ) : (
+        <FlatList
+          data={textNotes}
           keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
           renderItem={({ item }) => (
-            <NoteCard
-              title={item.title}
-              content={item.content}
-              updatedAt={item.updatedAt}
+            <Pressable
+              style={styles.noteCard}
               onPress={() => router.push(`/notas/${item.id}`)}
-            />
+            >
+              <Text style={styles.noteTitle}>{item.title}</Text>
+
+              <Text style={styles.noteContent} numberOfLines={3}>
+                {item.content}
+              </Text>
+
+              <Text style={styles.noteDate}>
+                Actualizada: {new Date(item.updated_at).toLocaleDateString()}
+              </Text>
+            </Pressable>
           )}
           ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Ionicons name="document-text-outline" size={34} color={colors.primary} />
-              <Text style={styles.emptyTitle}>Todavía no tienes notas</Text>
-              <Text style={styles.emptyText}>
-                Pulsa el botón + para crear tu primera nota.
+            <View style={styles.centerCard}>
+              <Ionicons
+                name="document-text-outline"
+                size={36}
+                color="#8b5cf6"
+              />
+              <Text style={styles.errorTitle}>Todavía no tienes notas</Text>
+              <Text style={styles.centerText}>
+                Cuando crees notas en la API aparecerán aquí.
               </Text>
             </View>
           }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: 96 + insets.bottom },
-          ]}
         />
-      </View>
+      )}
     </View>
   );
 }
@@ -80,22 +123,20 @@ export default function NotesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingHorizontal: 20,
-    paddingTop: 24,
-    backgroundColor: colors.background,
+    padding: 24,
+    backgroundColor: "#0f172a",
   },
   header: {
     flexDirection: "row",
-    alignItems: "flex-start",
     justifyContent: "space-between",
-    marginBottom: 18,
     gap: 16,
+    marginBottom: 20,
   },
   headerText: {
     flex: 1,
   },
   kicker: {
-    color: colors.primary,
+    color: "#8b5cf6",
     fontSize: 13,
     fontWeight: "800",
     letterSpacing: 1,
@@ -103,81 +144,101 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   title: {
-    fontSize: 38,
+    fontSize: 36,
     fontWeight: "900",
-    color: colors.text,
+    color: "#f8fafc",
     marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
-    lineHeight: 23,
-    color: colors.mutedText,
+    lineHeight: 22,
+    color: "#94a3b8",
   },
   addButton: {
-    width: 56,
-    height: 56,
+    width: 54,
+    height: 54,
     borderRadius: 18,
-    backgroundColor: colors.primary,
+    backgroundColor: "#8b5cf6",
     alignItems: "center",
     justifyContent: "center",
     marginTop: 4,
   },
   summaryCard: {
-    backgroundColor: colors.card,
+    backgroundColor: "#1e293b",
     borderRadius: 22,
     padding: 18,
     marginBottom: 18,
     borderWidth: 1,
-    borderColor: colors.border,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+    borderColor: "#334155",
   },
   summaryLabel: {
-    color: colors.mutedText,
+    color: "#94a3b8",
     fontSize: 15,
     marginBottom: 4,
   },
   summaryValue: {
-    color: colors.text,
+    color: "#f8fafc",
     fontSize: 30,
     fontWeight: "900",
   },
-  summaryIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 16,
-    backgroundColor: colors.primarySoft,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  listContainer: {
-    flex: 1,
-  },
   listContent: {
-    paddingBottom: 32,
+    paddingBottom: 40,
   },
-  emptyCard: {
-    backgroundColor: colors.card,
+  noteCard: {
+    backgroundColor: "#1e293b",
+    borderRadius: 22,
+    padding: 18,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: "#334155",
+  },
+  noteTitle: {
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: 8,
+  },
+  noteContent: {
+    color: "#cbd5e1",
+    fontSize: 15,
+    lineHeight: 22,
+    marginBottom: 12,
+  },
+  noteDate: {
+    color: "#64748b",
+    fontSize: 13,
+  },
+  centerCard: {
+    backgroundColor: "#1e293b",
     borderRadius: 22,
     padding: 24,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#334155",
     alignItems: "center",
-    marginTop: 8,
+    gap: 12,
   },
-  emptyTitle: {
-    color: colors.text,
-    fontSize: 20,
-    fontWeight: "800",
-    marginTop: 14,
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  emptyText: {
-    color: colors.mutedText,
+  centerText: {
+    color: "#94a3b8",
     fontSize: 15,
     lineHeight: 22,
     textAlign: "center",
+  },
+  errorTitle: {
+    color: "#f8fafc",
+    fontSize: 20,
+    fontWeight: "800",
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: "#8b5cf6",
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: "#ffffff",
+    fontSize: 15,
+    fontWeight: "800",
   },
 });
