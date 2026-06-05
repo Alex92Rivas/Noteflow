@@ -1,19 +1,41 @@
-﻿import { useRouter } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useEffect, useState } from "react";
+import { useRouter } from "expo-router";
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { ChecklistCard } from "../../../components/items/ChecklistCard";
-import { useChecklistsStore } from "../../../store/checklistsStore";
 import { darkTheme } from "../../../constants/theme";
+import { getNotes } from "../../../services/api";
+import type { ApiNote } from "../../../services/api";
 
 const colors = darkTheme.colors;
 
 export default function ChecklistsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const checklists = useChecklistsStore((state) => state.checklists);
+
+  const [apiNotes, setApiNotes] = useState<ApiNote[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const checklists = apiNotes
+    .filter((note) => note.type === "checklist")
+    .map((checklist) => ({
+      ...checklist,
+      items: checklist.items.map((item) => ({
+        id: item.id,
+        text: item.text,
+        completed: item.is_completed,
+      })),
+    }));
 
   const totalItems = checklists.reduce(
     (total, checklist) => total + checklist.items.length,
@@ -25,6 +47,25 @@ export default function ChecklistsScreen() {
       total + checklist.items.filter((item) => item.completed).length,
     0
   );
+
+  async function loadChecklists() {
+    try {
+      setIsLoading(true);
+      setErrorMessage(null);
+
+      const data = await getNotes();
+      setApiNotes(data);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("No se pudieron cargar las tareas desde la API.");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadChecklists();
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -66,32 +107,55 @@ export default function ChecklistsScreen() {
       </View>
 
       <View style={styles.listContainer}>
-        <FlashList
-          data={checklists}
-          keyExtractor={(item) => item.id}
-          renderItem={({ item }) => (
-            <ChecklistCard
-              title={item.title}
-              items={item.items}
-              updatedAt={item.updatedAt}
-              onPress={() => router.push(`/checklists/${item.id}`)}
-            />
-          )}
-          ListEmptyComponent={
-            <View style={styles.emptyCard}>
-              <Ionicons name="checkbox-outline" size={34} color={colors.success} />
-              <Text style={styles.emptyTitle}>Todavía no tienes tareas</Text>
-              <Text style={styles.emptyText}>
-                Pulsa el botón + para crear tu primera lista de tareas.
-              </Text>
-            </View>
-          }
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={[
-            styles.listContent,
-            { paddingBottom: 96 + insets.bottom },
-          ]}
-        />
+        {isLoading ? (
+          <View style={styles.feedbackCard}>
+            <ActivityIndicator color={colors.success} />
+            <Text style={styles.feedbackText}>
+              Cargando tareas desde la API...
+            </Text>
+          </View>
+        ) : errorMessage ? (
+          <View style={styles.feedbackCard}>
+            <Ionicons name="warning-outline" size={34} color={colors.success} />
+            <Text style={styles.emptyTitle}>Error al cargar tareas</Text>
+            <Text style={styles.emptyText}>{errorMessage}</Text>
+
+            <Pressable style={styles.retryButton} onPress={loadChecklists}>
+              <Text style={styles.retryButtonText}>Reintentar</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlashList
+            data={checklists}
+            keyExtractor={(item) => item.id}
+            renderItem={({ item }) => (
+              <ChecklistCard
+                title={item.title}
+                items={item.items}
+                updatedAt={item.updated_at}
+                onPress={() => router.push(`/checklists/${item.id}`)}
+              />
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyCard}>
+                <Ionicons
+                  name="checkbox-outline"
+                  size={34}
+                  color={colors.success}
+                />
+                <Text style={styles.emptyTitle}>Todavía no tienes tareas</Text>
+                <Text style={styles.emptyText}>
+                  Pulsa el botón + para crear tu primera lista de tareas.
+                </Text>
+              </View>
+            }
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={[
+              styles.listContent,
+              { paddingBottom: 96 + insets.bottom },
+            ]}
+          />
+        )}
       </View>
     </View>
   );
@@ -182,6 +246,33 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 32,
+  },
+  feedbackCard: {
+    backgroundColor: colors.card,
+    borderRadius: 22,
+    padding: 24,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    marginTop: 8,
+    gap: 12,
+  },
+  feedbackText: {
+    color: colors.mutedText,
+    fontSize: 15,
+    textAlign: "center",
+  },
+  retryButton: {
+    backgroundColor: colors.success,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 8,
+  },
+  retryButtonText: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "800",
   },
   emptyCard: {
     backgroundColor: colors.card,
