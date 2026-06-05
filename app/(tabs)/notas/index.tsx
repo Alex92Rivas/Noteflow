@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   FlatList,
@@ -37,9 +37,11 @@ export default function NotesScreen() {
     }
   }
 
-  useEffect(() => {
-    loadNotes();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadNotes();
+    }, [])
+  );
 
   return (
     <View style={styles.container}>
