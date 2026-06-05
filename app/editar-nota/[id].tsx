@@ -2,6 +2,7 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -13,25 +14,51 @@ import {
 } from "react-native";
 
 import { darkTheme } from "../../constants/theme";
-import { useNotesStore } from "../../store/notesStore";
+import { getNoteById, updateNote } from "../../services/api";
+import type { ApiNote } from "../../services/api";
 
 const theme = darkTheme;
 
 export default function EditNoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const note = useNotesStore((state) => state.getNoteById(id));
-  const updateNote = useNotesStore((state) => state.updateNote);
-
+  const [note, setNote] = useState<ApiNote | null>(null);
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
-    if (note) {
-      setTitle(note.title);
-      setContent(note.content);
+    async function loadNote() {
+      if (!id) return;
+
+      try {
+        setIsLoading(true);
+
+        const apiNote = await getNoteById(id);
+
+        if (apiNote.type !== "note") {
+          setNote(null);
+          Alert.alert("Error", "El elemento encontrado no es una nota.");
+          return;
+        }
+
+        setNote(apiNote);
+        setTitle(apiNote.title);
+        setContent(apiNote.content);
+      } catch (error) {
+        console.error(error);
+        Alert.alert(
+          "Error al cargar",
+          "No se ha podido cargar la nota desde el backend."
+        );
+      } finally {
+        setIsLoading(false);
+      }
     }
-  }, [note]);
+
+    loadNote();
+  }, [id]);
 
   const handleSave = async () => {
     if (!note) return;
@@ -40,16 +67,47 @@ export default function EditNoteScreen() {
     const cleanContent = content.trim();
 
     if (!cleanTitle || !cleanContent) {
-      Alert.alert("Campos incompletos", "Escribe un título y un contenido para la nota.");
+      Alert.alert(
+        "Campos incompletos",
+        "Escribe un título y un contenido para la nota."
+      );
       return;
     }
 
-    updateNote(note.id, cleanTitle, cleanContent);
+    try {
+      setIsSaving(true);
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const updatedNote = await updateNote(note.id, {
+        title: cleanTitle,
+        content: cleanContent,
+      });
 
-    router.replace(`/(tabs)/notas/${note.id}`);
+      setNote(updatedNote);
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      router.replace(`/(tabs)/notas/${updatedNote.id}`);
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert(
+        "Error al guardar",
+        "No se han podido guardar los cambios en el backend."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <View style={styles.centeredContainer}>
+        <Stack.Screen options={{ title: "Cargando nota" }} />
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={styles.emptyTitle}>Cargando nota...</Text>
+      </View>
+    );
+  }
 
   if (!note) {
     return (
@@ -102,8 +160,14 @@ export default function EditNoteScreen() {
             textAlignVertical="top"
           />
 
-          <Pressable style={styles.saveButton} onPress={handleSave}>
-            <Text style={styles.saveButtonText}>Guardar cambios</Text>
+          <Pressable
+            style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
+            <Text style={styles.saveButtonText}>
+              {isSaving ? "Guardando..." : "Guardar cambios"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -161,6 +225,9 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
     alignItems: "center",
     marginTop: theme.spacing.sm,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     color: "#ffffff",

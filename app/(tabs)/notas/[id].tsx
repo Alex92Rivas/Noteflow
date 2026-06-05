@@ -57,7 +57,7 @@ export default function NoteDetailScreen() {
 
     Alert.alert(
       "Eliminar nota",
-      `¿Seguro que quieres eliminar "${note.title}"?`,
+      `�Seguro que quieres eliminar "${note.title}"?`,
       [
         {
           text: "Cancelar",
@@ -138,12 +138,12 @@ export default function NoteDetailScreen() {
         </Text>
       </View>
 
-      <View style={styles.metaCard}>
-        <Text style={styles.metaText}>
-          Esta nota ya se carga desde la API. La edición se conectará en un paso
-          posterior.
-        </Text>
-      </View>
+      <Pressable
+        style={styles.editButton}
+        onPress={() => router.push(`/editar-nota/${note.id}`)}
+      >
+        <Text style={styles.editButtonText}>Editar nota</Text>
+      </Pressable>
 
       <Pressable style={styles.deleteButton} onPress={handleDeleteNote}>
         <Text style={styles.deleteButtonText}>Eliminar nota</Text>
@@ -202,6 +202,17 @@ const styles = StyleSheet.create({
     color: theme.colors.mutedText,
     fontSize: theme.typography.small,
     lineHeight: 20,
+  },
+  editButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    paddingVertical: theme.spacing.md,
+    alignItems: "center",
+  },
+  editButtonText: {
+    color: "#ffffff",
+    fontSize: theme.typography.body,
+    fontWeight: "700",
   },
   deleteButton: {
     backgroundColor: theme.colors.danger,
