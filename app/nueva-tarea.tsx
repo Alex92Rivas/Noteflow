@@ -12,13 +12,12 @@ import {
   View,
 } from "react-native";
 
-import { useChecklistsStore } from "../store/checklistsStore";
+import { createChecklistItem, createNote } from "../services/api";
 
 export default function NewChecklistScreen() {
-  const addChecklist = useChecklistsStore((state) => state.addChecklist);
-
   const [title, setTitle] = useState("");
   const [items, setItems] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const cleanTitle = title.trim();
@@ -35,11 +34,32 @@ export default function NewChecklistScreen() {
       return;
     }
 
-    addChecklist(cleanTitle, itemsList);
+    try {
+      setIsSaving(true);
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const checklist = await createNote({
+        title: cleanTitle,
+        content: "",
+        type: "checklist",
+      });
 
-    router.replace("/(tabs)/checklists");
+      await Promise.all(
+        itemsList.map((item) => createChecklistItem(checklist.id, item))
+      );
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      router.replace("/(tabs)/checklists");
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert(
+        "Error al guardar",
+        "No se ha podido guardar la lista de tareas en el backend."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -66,15 +86,23 @@ export default function NewChecklistScreen() {
         <TextInput
           value={items}
           onChangeText={setItems}
-          placeholder={"Escribe una tarea por línea\nEj:\nRepasar TypeScript\nHacer documentación\nProbar la app"}
+          placeholder={
+            "Escribe una tarea por línea\nEj:\nRepasar TypeScript\nHacer documentación\nProbar la app"
+          }
           placeholderTextColor="#9ca3af"
           style={[styles.input, styles.textArea]}
           multiline
           textAlignVertical="top"
         />
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Guardar tarea</Text>
+        <Pressable
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          <Text style={styles.saveButtonText}>
+            {isSaving ? "Guardando..." : "Guardar tarea"}
+          </Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -126,6 +154,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     color: "#ffffff",

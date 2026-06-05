@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "expo-router";
+import { useCallback, useState } from "react";
+import { useFocusEffect, useRouter } from "expo-router";
 import {
   ActivityIndicator,
   Pressable,
@@ -63,9 +63,11 @@ export default function ChecklistsScreen() {
     }
   }
 
-  useEffect(() => {
-    loadChecklists();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      loadChecklists();
+    }, [])
+  );
 
   return (
     <View style={styles.container}>
