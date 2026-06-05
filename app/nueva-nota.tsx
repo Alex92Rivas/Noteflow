@@ -13,14 +13,14 @@ import {
 import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 
-import { useNotesStore } from "../store/notesStore";
+import { createNote } from "../services/api";
 
 export default function NewNoteScreen() {
   const router = useRouter();
-  const addNote = useNotesStore((state) => state.addNote);
 
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const cleanTitle = title.trim();
@@ -34,11 +34,28 @@ export default function NewNoteScreen() {
       return;
     }
 
-    addNote(cleanTitle, cleanContent);
+    try {
+      setIsSaving(true);
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await createNote({
+        title: cleanTitle,
+        content: cleanContent,
+        type: "note",
+      });
 
-    router.replace("/(tabs)/notas");
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      router.replace("/(tabs)/notas");
+    } catch (error) {
+      console.error(error);
+
+      Alert.alert(
+        "Error al guardar",
+        "No se ha podido guardar la nota en el backend."
+      );
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -80,9 +97,15 @@ export default function NewNoteScreen() {
             textAlignVertical="top"
           />
 
-          <Pressable style={styles.button} onPress={handleSave}>
+          <Pressable
+            style={[styles.button, isSaving && styles.buttonDisabled]}
+            onPress={handleSave}
+            disabled={isSaving}
+          >
             <Ionicons name="save-outline" size={22} color="#ffffff" />
-            <Text style={styles.buttonText}>Guardar nota</Text>
+            <Text style={styles.buttonText}>
+              {isSaving ? "Guardando..." : "Guardar nota"}
+            </Text>
           </Pressable>
         </View>
       </View>
@@ -157,6 +180,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
     marginTop: 4,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: "#ffffff",
