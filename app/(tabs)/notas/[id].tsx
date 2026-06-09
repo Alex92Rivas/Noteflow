@@ -57,7 +57,7 @@ export default function NoteDetailScreen() {
 
     Alert.alert(
       "Eliminar nota",
-      `¿Seguro que quieres eliminar "${note.title}"?`,
+      `Â¿Seguro que quieres eliminar "${note.title}"?`,
       [
         {
           text: "Cancelar",
