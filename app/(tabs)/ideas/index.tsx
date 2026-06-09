@@ -1,5 +1,7 @@
-import { useEffect, useState } from "react";
-import { useRouter } from "expo-router";
+import { Ionicons } from "@expo/vector-icons";
+import { FlashList } from "@shopify/flash-list";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
@@ -7,8 +9,6 @@ import {
   Text,
   View,
 } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { IdeaCard } from "../../../components/items/IdeaCard";
@@ -26,12 +26,23 @@ export default function IdeasScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
+  const { deletedId, refresh } = useLocalSearchParams<{
+    deletedId?: string;
+    refresh?: string;
+  }>();
+
   const [apiNotes, setApiNotes] = useState<ApiNote[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [listVersion, setListVersion] = useState(0);
 
   const ideas = apiNotes
     .filter((note) => note.type === "idea")
+    .filter((note) => !deletedId || note.id !== deletedId)
+    .sort(
+      (a, b) =>
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    )
     .map((idea) => ({
       ...idea,
       tags: getTagNames(idea.tags),
@@ -40,13 +51,19 @@ export default function IdeasScreen() {
   const ideasWithTags = ideas.filter((idea) => idea.tags.length > 0).length;
   const totalTags = ideas.reduce((total, idea) => total + idea.tags.length, 0);
 
-  async function loadIdeas() {
+  async function loadIdeas(idToHide?: string) {
     try {
       setIsLoading(true);
       setErrorMessage(null);
 
       const data = await getNotes();
-      setApiNotes(data);
+
+      const filteredData = idToHide
+        ? data.filter((note) => note.id !== idToHide)
+        : data;
+
+      setApiNotes(filteredData);
+      setListVersion((currentVersion) => currentVersion + 1);
     } catch (error) {
       console.error(error);
       setErrorMessage("No se pudieron cargar las ideas desde la API.");
@@ -55,9 +72,29 @@ export default function IdeasScreen() {
     }
   }
 
-  useEffect(() => {
-    loadIdeas();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      if (deletedId) {
+        setApiNotes((currentNotes) =>
+          currentNotes.filter((note) => note.id !== deletedId)
+        );
+        setListVersion((currentVersion) => currentVersion + 1);
+      }
+
+      const timeoutId = setTimeout(async () => {
+        if (isActive) {
+          await loadIdeas(deletedId);
+        }
+      }, 800);
+
+      return () => {
+        isActive = false;
+        clearTimeout(timeoutId);
+      };
+    }, [deletedId, refresh])
+  );
 
   return (
     <View style={styles.container}>
@@ -66,16 +103,26 @@ export default function IdeasScreen() {
           <Text style={styles.kicker}>NoteFlow</Text>
           <Text style={styles.title}>Ideas</Text>
           <Text style={styles.subtitle}>
-            Guarda conceptos, inspiraciones y etiquetas para desarrollarlas después.
+            Guarda conceptos, inspiraciones y etiquetas para desarrollarlas
+            después.
           </Text>
         </View>
 
-        <Pressable
-          style={styles.addButton}
-          onPress={() => router.push("/nueva-idea")}
-        >
-          <Ionicons name="add" size={28} color={colors.text} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable
+            style={styles.refreshButton}
+            onPress={() => loadIdeas(deletedId)}
+          >
+            <Ionicons name="refresh" size={22} color={colors.warning} />
+          </Pressable>
+
+          <Pressable
+            style={styles.addButton}
+            onPress={() => router.push("/nueva-idea")}
+          >
+            <Ionicons name="add" size={28} color={colors.text} />
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.summaryCard}>
@@ -119,13 +166,22 @@ export default function IdeasScreen() {
             <Text style={styles.emptyTitle}>Error al cargar ideas</Text>
             <Text style={styles.emptyText}>{errorMessage}</Text>
 
-            <Pressable style={styles.retryButton} onPress={loadIdeas}>
+            <Pressable
+              style={styles.retryButton}
+              onPress={() => loadIdeas(deletedId)}
+            >
               <Text style={styles.retryButtonText}>Reintentar</Text>
             </Pressable>
           </View>
         ) : (
           <FlashList
+            key={`ideas-list-${listVersion}-${deletedId ?? ""}-${
+              refresh ?? ""
+            }`}
             data={ideas}
+            extraData={`${ideas.length}-${listVersion}-${deletedId ?? ""}-${
+              refresh ?? ""
+            }`}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
               <IdeaCard
@@ -174,6 +230,12 @@ const styles = StyleSheet.create({
   headerText: {
     flex: 1,
   },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginTop: 4,
+  },
   kicker: {
     color: colors.warning,
     fontSize: 13,
@@ -193,6 +255,16 @@ const styles = StyleSheet.create({
     lineHeight: 23,
     color: colors.mutedText,
   },
+  refreshButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 16,
+    backgroundColor: colors.card,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   addButton: {
     width: 56,
     height: 56,
@@ -200,7 +272,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.warning,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 4,
   },
   summaryCard: {
     backgroundColor: colors.card,

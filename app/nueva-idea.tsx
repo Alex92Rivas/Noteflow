@@ -2,6 +2,7 @@
 import { Stack, router } from "expo-router";
 import { useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -12,14 +13,13 @@ import {
   View,
 } from "react-native";
 
-import { useIdeasStore } from "../store/ideasStore";
+import { createNote, createNoteTag } from "../services/api";
 
 export default function NewIdeaScreen() {
-  const addIdea = useIdeasStore((state) => state.addIdea);
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleSave = async () => {
     const cleanTitle = title.trim();
@@ -30,15 +30,36 @@ export default function NewIdeaScreen() {
       .filter(Boolean);
 
     if (!cleanTitle || !cleanContent) {
-      Alert.alert("Campos incompletos", "Escribe un título y una descripción para la idea.");
+      Alert.alert(
+        "Campos incompletos",
+        "Escribe un título y una descripción para la idea."
+      );
       return;
     }
 
-    addIdea(cleanTitle, cleanContent, tagsList);
+    try {
+      setIsSaving(true);
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const createdIdea = await createNote({
+        title: cleanTitle,
+        content: cleanContent,
+        type: "idea",
+        color: "#f59e0b",
+      });
 
-    router.replace("/(tabs)/ideas");
+      await Promise.all(
+        tagsList.map((tag) => createNoteTag(createdIdea.id, tag))
+      );
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      router.replace("/(tabs)/ideas");
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", String(error));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -81,8 +102,16 @@ export default function NewIdeaScreen() {
           style={styles.input}
         />
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Guardar idea</Text>
+        <Pressable
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Guardar idea</Text>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -134,6 +163,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     color: "#ffffff",

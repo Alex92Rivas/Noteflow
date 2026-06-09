@@ -2,6 +2,7 @@
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
   Platform,
@@ -12,61 +13,115 @@ import {
   View,
 } from "react-native";
 
-import { useIdeasStore } from "../../store/ideasStore";
+import {
+  createNoteTag,
+  getNoteById,
+  updateNote,
+} from "../../services/api";
+import type { ApiNote } from "../../services/api";
+
+function getTagNames(tags: ApiNote["tags"]) {
+  return tags.map((tag) => (typeof tag === "string" ? tag : tag.tag));
+}
 
 export default function EditIdeaScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
 
-  const idea = useIdeasStore((state) => state.getIdeaById(id));
-  const updateIdea = useIdeasStore((state) => state.updateIdea);
-
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [tags, setTags] = useState("");
+  const [originalTags, setOriginalTags] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+
+  async function loadIdea() {
+    if (!id) return;
+
+    try {
+      setIsLoading(true);
+
+      const data = await getNoteById(id);
+
+      if (data.type !== "idea") {
+        Alert.alert("Error", "El elemento encontrado no es una idea.");
+        router.replace("/(tabs)/ideas");
+        return;
+      }
+
+      const tagNames = getTagNames(data.tags);
+
+      setTitle(data.title);
+      setContent(data.content);
+      setTags(tagNames.join(", "));
+      setOriginalTags(tagNames);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "No se pudo cargar la idea desde la API.");
+      router.replace("/(tabs)/ideas");
+    } finally {
+      setIsLoading(false);
+    }
+  }
 
   useEffect(() => {
-    if (idea) {
-      setTitle(idea.title);
-      setContent(idea.content);
-      setTags(idea.tags.join(", "));
-    }
-  }, [idea]);
+    loadIdea();
+  }, [id]);
 
   const handleSave = async () => {
-    if (!idea) return;
+    if (!id) return;
 
     const cleanTitle = title.trim();
     const cleanContent = content.trim();
-    const tagsList = tags
+    const nextTags = tags
       .split(",")
       .map((tag) => tag.trim())
       .filter(Boolean);
 
     if (!cleanTitle || !cleanContent) {
-      Alert.alert("Campos incompletos", "Escribe un título y una descripción para la idea.");
+      Alert.alert(
+        "Campos incompletos",
+        "Escribe un título y una descripción para la idea."
+      );
       return;
     }
 
-    updateIdea(idea.id, cleanTitle, cleanContent, tagsList);
+    try {
+      setIsSaving(true);
 
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await updateNote(id, {
+        title: cleanTitle,
+        content: cleanContent,
+        color: "#f59e0b",
+      });
 
-    router.replace(`/ideas/${idea.id}`);
+      const tagsToCreate = nextTags.filter(
+        (tag) => !originalTags.includes(tag)
+      );
+
+      for (const tag of tagsToCreate) {
+        await createNoteTag(id, tag);
+      }
+
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      router.replace(`/ideas/${id}`);
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "No se pudo actualizar la idea en la API.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  if (!idea) {
+  if (isLoading) {
     return (
       <View style={styles.container}>
-        <Stack.Screen options={{ title: "Idea no encontrada" }} />
+        <Stack.Screen options={{ title: "Cargando idea" }} />
 
-        <Text style={styles.title}>Idea no encontrada</Text>
-
-        <Pressable
-          style={styles.saveButton}
-          onPress={() => router.replace("/(tabs)/ideas")}
-        >
-          <Text style={styles.saveButtonText}>Volver a ideas</Text>
-        </Pressable>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#f59e0b" />
+          <Text style={styles.loadingText}>Cargando idea desde la API...</Text>
+        </View>
       </View>
     );
   }
@@ -80,13 +135,13 @@ export default function EditIdeaScreen() {
 
       <View style={styles.content}>
         <Text style={styles.label}>Editar idea</Text>
-        <Text style={styles.title}>Actualiza tu inspiración</Text>
+        <Text style={styles.title}>Actualiza tu idea</Text>
 
         <Text style={styles.inputLabel}>Título</Text>
         <TextInput
           value={title}
           onChangeText={setTitle}
-          placeholder="Título de la idea"
+          placeholder="Ej: Buscador global"
           placeholderTextColor="#9ca3af"
           style={styles.input}
         />
@@ -95,7 +150,7 @@ export default function EditIdeaScreen() {
         <TextInput
           value={content}
           onChangeText={setContent}
-          placeholder="Descripción de la idea"
+          placeholder="Describe la idea..."
           placeholderTextColor="#9ca3af"
           style={[styles.input, styles.textArea]}
           multiline
@@ -106,13 +161,25 @@ export default function EditIdeaScreen() {
         <TextInput
           value={tags}
           onChangeText={setTags}
-          placeholder="Ej: ui, futuro, mejora"
+          placeholder="Ej: ui, mejora, futuro"
           placeholderTextColor="#9ca3af"
           style={styles.input}
         />
 
-        <Pressable style={styles.saveButton} onPress={handleSave}>
-          <Text style={styles.saveButtonText}>Guardar cambios</Text>
+        <Text style={styles.helperText}>
+          Puedes añadir etiquetas nuevas separadas por comas. Las etiquetas antiguas se conservan.
+        </Text>
+
+        <Pressable
+          style={[styles.saveButton, isSaving && styles.saveButtonDisabled]}
+          onPress={handleSave}
+          disabled={isSaving}
+        >
+          {isSaving ? (
+            <ActivityIndicator color="#ffffff" />
+          ) : (
+            <Text style={styles.saveButtonText}>Guardar cambios</Text>
+          )}
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -128,6 +195,17 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 24,
     gap: 14,
+  },
+  centerContent: {
+    flex: 1,
+    padding: 24,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 14,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: "#4b5563",
   },
   label: {
     color: "#f59e0b",
@@ -158,12 +236,20 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 170,
   },
+  helperText: {
+    color: "#6b7280",
+    fontSize: 14,
+    lineHeight: 20,
+  },
   saveButton: {
     backgroundColor: "#f59e0b",
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center",
     marginTop: 10,
+  },
+  saveButtonDisabled: {
+    opacity: 0.7,
   },
   saveButtonText: {
     color: "#ffffff",

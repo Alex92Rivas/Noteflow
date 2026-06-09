@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import { Ionicons } from "@expo/vector-icons";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import { useEffect, useState } from "react";
@@ -24,6 +25,7 @@ export default function IdeaDetailScreen() {
   const [idea, setIdea] = useState<ApiNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   async function loadIdea() {
     if (!id) return;
@@ -55,7 +57,7 @@ export default function IdeaDetailScreen() {
   }, [id]);
 
   const handleDelete = () => {
-    if (!idea) return;
+    if (!idea || isDeleting) return;
 
     Alert.alert(
       "Eliminar idea",
@@ -70,11 +72,20 @@ export default function IdeaDetailScreen() {
           style: "destructive",
           onPress: async () => {
             try {
+              setIsDeleting(true);
+
               await deleteNote(idea.id);
+
+              await Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success
+              );
+
               router.replace("/(tabs)/ideas");
             } catch (error) {
               console.error(error);
-              Alert.alert("Error", "No se pudo eliminar la idea desde la API.");
+              Alert.alert("Error", String(error));
+            } finally {
+              setIsDeleting(false);
             }
           },
         },
@@ -145,29 +156,36 @@ export default function IdeaDetailScreen() {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Etiquetas</Text>
 
-        <View style={styles.tagsContainer}>
-          {tags.length > 0 ? (
-            tags.map((tag) => (
+        {tags.length > 0 ? (
+          <View style={styles.tagsContainer}>
+            {tags.map((tag) => (
               <View key={tag} style={styles.tag}>
                 <Text style={styles.tagText}>#{tag}</Text>
               </View>
-            ))
-          ) : (
-            <Text style={styles.body}>Sin etiquetas</Text>
-          )}
-        </View>
+            ))}
+          </View>
+        ) : (
+          <Text style={styles.body}>Sin etiquetas</Text>
+        )}
       </View>
 
-      <View style={styles.infoBox}>
-        <Text style={styles.infoLabel}>Nota</Text>
-        <Text style={styles.infoValue}>
-          El detalle de esta idea ya se carga desde la API. La edición se
-          conectará en un paso posterior.
-        </Text>
-      </View>
+      <Pressable
+        style={styles.editButton}
+        onPress={() => router.push(`/editar-idea/${idea.id}`)}
+      >
+        <Text style={styles.buttonText}>Editar idea</Text>
+      </Pressable>
 
-      <Pressable style={styles.deleteButton} onPress={handleDelete}>
-        <Text style={styles.buttonText}>Eliminar idea</Text>
+      <Pressable
+        style={[styles.deleteButton, isDeleting && styles.deleteButtonDisabled]}
+        onPress={handleDelete}
+        disabled={isDeleting}
+      >
+        {isDeleting ? (
+          <ActivityIndicator color="#ffffff" />
+        ) : (
+          <Text style={styles.buttonText}>Eliminar idea</Text>
+        )}
       </Pressable>
 
       <View style={styles.infoBox}>
@@ -281,6 +299,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: "center",
     marginBottom: 18,
+  },
+  deleteButtonDisabled: {
+    opacity: 0.7,
   },
   buttonText: {
     color: "#ffffff",
