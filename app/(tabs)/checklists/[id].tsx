@@ -11,7 +11,12 @@ import {
   View,
 } from "react-native";
 
-import { deleteNote, getNoteById } from "../../../services/api";
+import {
+  deleteNote,
+  getNoteById,
+  updateChecklistItem,
+} from "../../../services/api";
+
 import type { ApiNote } from "../../../services/api";
 
 export default function ChecklistDetailScreen() {
@@ -20,6 +25,7 @@ export default function ChecklistDetailScreen() {
   const [checklist, setChecklist] = useState<ApiNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [updatingItemId, setUpdatingItemId] = useState<string | null>(null);
 
   async function loadChecklist() {
     if (!id) return;
@@ -49,6 +55,47 @@ export default function ChecklistDetailScreen() {
   useEffect(() => {
     loadChecklist();
   }, [id]);
+
+  async function handleToggleItem(itemId: string, currentValue: boolean) {
+    if (!checklist || updatingItemId) return;
+
+    const previousChecklist = checklist;
+    const nextValue = !currentValue;
+
+    setUpdatingItemId(itemId);
+
+    setChecklist({
+      ...checklist,
+      items: checklist.items.map((item) =>
+        item.id === itemId ? { ...item, is_completed: nextValue } : item
+      ),
+      updated_at: new Date().toISOString(),
+    });
+
+    try {
+      const updatedItem = await updateChecklistItem(checklist.id, itemId, {
+        is_completed: nextValue,
+      });
+
+      setChecklist((currentChecklist) => {
+        if (!currentChecklist) return currentChecklist;
+
+        return {
+          ...currentChecklist,
+          items: currentChecklist.items.map((item) =>
+            item.id === itemId ? updatedItem : item
+          ),
+          updated_at: new Date().toISOString(),
+        };
+      });
+    } catch (error) {
+      console.error(error);
+      setChecklist(previousChecklist);
+      Alert.alert("Error", "No se pudo actualizar la tarea desde la API.");
+    } finally {
+      setUpdatingItemId(null);
+    }
+  }
 
   const handleDelete = () => {
     if (!checklist) return;
@@ -156,10 +203,21 @@ export default function ChecklistDetailScreen() {
           </Text>
         ) : (
           checklist.items.map((item) => (
-            <View key={item.id} style={styles.taskRow}>
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [
+                styles.taskRow,
+                pressed && styles.taskRowPressed,
+              ]}
+              onPress={() => handleToggleItem(item.id, item.is_completed)}
+              disabled={updatingItemId === item.id}
+              hitSlop={8}
+            >
               <Ionicons
-                name={item.is_completed ? "checkmark-circle" : "ellipse-outline"}
-                size={24}
+                name={
+                  item.is_completed ? "checkmark-circle" : "ellipse-outline"
+                }
+                size={26}
                 color={item.is_completed ? "#16a34a" : "#9ca3af"}
               />
 
@@ -171,7 +229,11 @@ export default function ChecklistDetailScreen() {
               >
                 {item.text}
               </Text>
-            </View>
+
+              {updatingItemId === item.id ? (
+                <ActivityIndicator size="small" color="#16a34a" />
+              ) : null}
+            </Pressable>
           ))
         )}
       </View>
@@ -179,8 +241,8 @@ export default function ChecklistDetailScreen() {
       <View style={styles.infoBox}>
         <Text style={styles.infoLabel}>Nota</Text>
         <Text style={styles.infoValue}>
-          El detalle de esta tarea ya se carga desde la API. Marcar items como
-          completados se conectará en un paso posterior.
+          El detalle de esta tarea se carga desde la API. Al pulsar un item, se
+          marca o desmarca y se guarda en el backend.
         </Text>
       </View>
 
@@ -273,7 +335,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 10,
-    marginBottom: 12,
+    paddingVertical: 8,
+    marginBottom: 8,
+    borderRadius: 12,
+  },
+  taskRowPressed: {
+    opacity: 0.6,
   },
   taskText: {
     flex: 1,

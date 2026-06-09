@@ -40,6 +40,11 @@ type UpdateNoteInput = {
   color?: string;
 };
 
+type UpdateChecklistItemInput = {
+  text?: string;
+  is_completed?: boolean;
+};
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${url}`, {
     headers: {
@@ -93,6 +98,17 @@ export async function createChecklistItem(noteId: string, text: string) {
   return request<ApiChecklistItem>(`/notes/${noteId}/items`, {
     method: "POST",
     body: JSON.stringify({ text }),
+  });
+}
+
+export async function updateChecklistItem(
+  noteId: string,
+  itemId: string,
+  data: UpdateChecklistItemInput
+) {
+  return request<ApiChecklistItem>(`/notes/${noteId}/items/${itemId}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
   });
 }
 
